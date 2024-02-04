@@ -1,37 +1,34 @@
-﻿Import-Module ActiveDirectory
+Import-Module ActiveDirectory
 
-#Get the admin info
-$Username = Read-Host -Prompt "Please enter the admin name"
-if ([string]::IsNullOrWhiteSpace($Username)) {
-    Write-Host "Invalid username. Please enter a non-empty username."
-    return
-}
-$securePassword = Read-Host -Prompt "Please enter your password" -AsSecureString
-if ([string]::IsNullOrWhiteSpace($securePassword)) {
-    Write-Host "Invalid password. Please enter a non-empty password."
-    return
-}
+#Get-Credential | Export-Clixml C:\Users\Administrator\pass.xml  #in your first run uncomment this line, after you enter the credientials you can comment it again.
+$adminAccount = Import-Clixml C:\Users\Administrator\pass.xml #in your first run comment this line. after that uncomment it.
 
 # Load the required assembly
 Add-Type -AssemblyName System.DirectoryServices.Protocols
 
 $RootDSE = [ADSI]"LDAP://RootDSE"
 $LDAPDirectory = New-Object System.DirectoryServices.Protocols.LdapDirectoryIdentifier($RootDSE.dnsHostName)
-$Credentials = New-Object System.Net.NetworkCredential($Username, $securePassword)
+$Credentials = New-Object System.Net.NetworkCredential($adminAccount.Username, $adminAccount.Password)
 $LDAPConnection = New-Object System.DirectoryServices.Protocols.LdapConnection($LDAPDirectory, $Credentials)
-$LDAPConnection.SessionOptions.ProtocolVersion = 3 # Set the LDAP protocol to version 3
-
 
 #--------------------------------Functions---------------------------------
+function DisplayUsers
+{
+    # Retrieve and display email addresses of all users except krbtgt
+    Get-ADUser -Filter {SamAccountName -ne 'krbtgt'} -Property mail | Select-Object sAMAccountName,mail,distinguishedName | Format-Table -AutoSize
+
+}
+
 function AddUserToAD
 {
     # User details
     $NewUserName = Read-Host -Prompt "Enter the sAMAccount name"
     $UserPassword = Read-Host -Prompt "Enter user's password" -AsSecureString
-    $UserPrincipalName = Read-Host -Prompt "Enter user's mail address"
+    $UserPrincipalName = Read-Host -Prompt "Enter user's principal name"
     $GivenName = Read-Host -Prompt "Enter user's Given Name"
     $Surname = Read-Host -Prompt "Enter user's surname"
     $DisplayName = "$GivenName $Surname"
+    $Email = Read-Host -Prompt "Enter user's email address"
     $Path = "CN=Users,DC=RTS,DC=LOCAL"
 
     # Create the new user
@@ -43,9 +40,10 @@ function AddUserToAD
                 -DisplayName $DisplayName `
                 -AccountPassword $UserPassword `
                 -Path $Path `
-                -Enabled $true
+                -Enabled $true `
+                -EmailAddress $Email
 
-    Write-Host "The user with sAMAccount: $NewUserName is created"
+    Write-Host "`r`nThe user with sAMAccount: $NewUserName is created`r`n"
 }
 
 function RemoveUserFromAD
@@ -58,9 +56,9 @@ function RemoveUserFromAD
     if ($User) {
         # User exists, now remove them
         Remove-ADUser -Identity $User.DistinguishedName -Confirm:$false
-        Write-Host "User with $UserSamAccountName  samAccountName has been removed from Active Directory."
+        Write-Host "`r`nUser with $UserSamAccountName  samAccountName has been removed from Active Directory.`r`n"
     } else {
-        Write-Host "User $UserSamAccountName with samAccountName couldn't found in Active Directory."
+        Write-Host "`r`nUser with $UserSamAccountName samAccountName couldn't found in Active Directory.`r`n"
     }
 }
 
@@ -78,7 +76,7 @@ function ChangeUserMail
 
     # Check if user is found
     if ($searchResponse.Entries.Count -ne 1) {
-        Write-Host "User not found or multiple entries returned."
+        Write-Host "`r`nUser not found or multiple entries returned.`r`n"
         return
     }
 
@@ -96,52 +94,33 @@ function ChangeUserMail
     # Try to apply the modification
     try {
         $LDAPConnection.SendRequest($modifyRequest)
-        Write-Host "Email updated successfully for user: $UserToModify"
+        Write-Host "`r`nEmail updated successfully for user: $UserToModify`r`n"
     } catch {
-        Write-Host "Failed to update email for user: $UserToModify"
+        Write-Host "`r`nFailed to update email for user: $UserToModify`r`n"
         Write-Host "Error: $_"
     }
-
-    <#do{
-        $ContinueAnswer = Read-Host -Prompt "Would you like to continue to change or add another user's mail [yes/no]\n"
-
-        if ($ContinueAnswer -eq "yes") 
-        {      
-            Write-Host "You chose to continue.\n"
-        }
-        elseif ($ContinueAnswer -eq "no") 
-        {        
-            Write-Host "You chose not to continue.\n"
-        }
-        else 
-        {        
-            Write-Host "Invalid input. Please enter 'yes' or 'no'.\n"       
-        }
-
-    }while($ContinueAnswer -ne "yes" -and $ContinueAnswer -ne "no")#>
-    
 }
 
-#----------------MainLoop------------------------
+#------------------------MainLoop-------------------------
 do
 {
-    Write-Host "Choose one of the operations [1/2/3/4]"
+    Write-Host "`r`nChoose one of the operations [0/1/2/3/4]"
+    Write-Host "[0]Display all users"
     Write-Host "[1]Add user"
     Write-Host "[2]Remove user"
     Write-Host "[3]Update mail account of a user"
-    Write-Host "[4]Exit"
+    Write-Host "[4]Exit`r`n"
 
     $selectedOperation = Read-Host -Prompt "Choose an operation: "
 
     switch($selectedOperation)
     {
+        0{DisplayUsers}
         1{AddUserToAD}
         2{RemoveUserFromAD}
         3{ChangeUserMail}
         4{}
-        default{Write-Host "Invalid input is given!"}
+        default{ cls Write-Host "Invalid input is given!"}        
     }
 
 }while($selectedOperation -ne 4)
-
-
