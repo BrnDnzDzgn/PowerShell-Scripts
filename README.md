@@ -1,0 +1,1 @@
+In this repository you can find many PowerShell scripts which were written by me. Each script are independent from one another and each script written for a reason. You can freely choose the script which will work for you.
